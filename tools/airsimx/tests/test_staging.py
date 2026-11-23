@@ -17,7 +17,7 @@ class StagingTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.base = Path(self.temporary.name)
+        self.base = Path(self.temporary.name).resolve()
         self.root = self.base / 'checkout'
         self.project = self.base / 'separate-project/Custom.uproject'
         files = {

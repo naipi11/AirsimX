@@ -1,6 +1,6 @@
 # AirsimX
 
-[简体中文](README.zh-CN.md) · [Getting started](docs/airsimx/windows-development.md) · [Validation](docs/airsimx/validation.md) · [Source preview releases](https://github.com/naipi11/AirsimX/releases)
+[简体中文](README.zh-CN.md) · [Getting started](docs/airsimx/windows-development.md) · [Validation](docs/airsimx/validation.md) · [Contributing](CONTRIBUTING.md) · [Source preview releases](https://github.com/naipi11/AirsimX/releases)
 
 <picture>
   <source media="(max-width: 600px)" srcset="docs/airsimx/media/ridge-flight-mobile.jpg">

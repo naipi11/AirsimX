@@ -1,60 +1,102 @@
-name: AirsimX offline checks
-
-# Runs every suite that needs neither Unreal nor a flight controller:
-# the Python client, the airsimx tool tests, and the ROS 2 conversion
-# tests. Simulator checks (PX4, ROS 2 bridge, Gymnasium) stay manual --
-# they need Windows + Unreal and a second machine, see
-# docs/airsimx/windows-development.md.
-#
-# The suites run through tools/airsimx/ci/run_offline.py so a local run and
-# a CI run produce the same result.json, including the source commit and the
-# dependency versions.
-#
-# Actions are pinned to commit SHAs and Python packages to the versions the
-# validation environment used; keep both pinned so a passing run stays
-# reproducible.
+name: AirsimX CI
 
 on:
   pull_request:
+    branches: [preview]
+  push:
+    branches: [preview]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   offline:
-    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    name: Offline (${{ matrix.os }}, Python 3.12)
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ['3.12']
+        os: [ubuntu-24.04, windows-2022]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: ${{ matrix.python }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r PythonClient/requirements-v01-windows.txt
-          python -m pip install -r PythonClient/requirements-gym.txt
-
-      - name: Run offline suites
-        shell: bash
-        run: |
-          python tools/airsimx/ci/run_offline.py --output build/airsimx/ci/github-${{ matrix.os }}
-
-      - name: Show report
-        if: always()
-        shell: bash
-        run: cat build/airsimx/ci/github-${{ matrix.os }}/result.json
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install -r PythonClient/requirements-v01-windows.txt -r PythonClient/requirements-gym.txt
+      - name: Check test dependencies and the Gym environment are importable
+        env:
+          PYTHONPATH: PythonClient
+        run: python -c "import cv2, gymnasium, msgpack, numpy, psutil; from airsim_gym import AirSimQuadrotorEnv"
+      - name: Test the SDK, tools and ROS coordinate conversions
+        run: python -I tools/airsimx/ci/run_offline.py --output build/airsimx/ci/offline
+      - name: Upload offline test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: offline-${{ matrix.os }}-py${{ matrix.python }}
-          path: build/airsimx/ci/github-${{ matrix.os }}/result.json
+          name: offline-${{ matrix.os }}
+          path: build/airsimx/ci/offline/result.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  native:
+    name: Native core (Windows x64 Release)
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Check out pinned protocol inputs only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: microsoft/AirSim
+          ref: 1ca93f6f77e4e8a39b2b241c1fe2764da4d7dd41
+          path: build/ci-upstream
+          sparse-checkout: MavLinkCom/mavlink
+          persist-credentials: false
+      - name: Restore native build inputs (no Unreal assets)
+        run: python -I tools/airsimx/restore_upstream_inputs.py build/ci-upstream --core-only
+      - name: Prepare hash-locked dependencies
+        run: python -I tools/airsimx/build_windows.py prepare --output build/airsimx/ci/prepare
+      - name: Build the native core and run AirLib tests
+        run: python -I tools/airsimx/build_windows.py core --configuration Release --jobs 2 --output build/airsimx/ci/native
+      - name: Upload native build and test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-windows-release
+          path: |
+            build/airsimx/ci/prepare/result.json
+            build/airsimx/ci/native/result.json
+            build/airsimx/ci/native/*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  gate:
+    name: PR gate
+    if: ${{ always() }}
+    needs: [offline, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions: {}
+    steps:
+      - name: Require every test job to succeed
+        shell: bash
+        env:
+          OFFLINE: ${{ needs.offline.result }}
+          NATIVE: ${{ needs.native.result }}
+        run: |
+          printf 'Offline: %s\nNative core: %s\n' "$OFFLINE" "$NATIVE"
+          [[ "$OFFLINE" == success && "$NATIVE" == success ]]

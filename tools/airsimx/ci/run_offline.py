@@ -84,6 +84,8 @@ def run_suite(name, start_dir, extra_path):
         [sys.executable, '-m', 'unittest', 'discover', '-s', str(start_dir), '-v'],
         cwd=ROOT, env=env, capture_output=True, text=True, timeout=1800)
     output = (result.stdout or '') + (result.stderr or '')
+    if result.returncode != 0:
+        print(f'{name} test output:\n{output.rstrip()}', flush=True)
     skipped = 'skipped' in output and result.returncode == 0
     return {
         'name': name,

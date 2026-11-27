@@ -23,7 +23,9 @@ git switch -c feat/camera-timestamps origin/preview
 | `Native core (Windows x64 Release)` | Restores pinned protocol inputs, verifies dependency archives, builds the native libraries and runs the AirLib tests. No Unreal installation. |
 | `PR gate` | Passes only when both offline matrix legs and the native job succeed. This is the stable check name for a branch rule. |
 
-Run the [offline suite locally](docs/airsimx/windows-development.md#run-the-offline-checks) before pushing. On the PR, open **Checks → AirsimX CI** for a failing step; when produced, JSON reports and native build/test logs are retained under the workflow run's **Artifacts** for seven days. Fix failures on the same branch. PRs targeting `preview` run automatically, as do pushes to `preview` after a merge. A maintainer can also start a manual run from **Actions**.
+Run the [offline suite locally](docs/airsimx/windows-development.md#run-the-offline-checks) before pushing. In **Checks → AirsimX CI**, a failing offline test step shows the test names and tracebacks in the job log. JSON reports and native build/test logs, when produced, are kept under **Artifacts** for seven days. Fix failures on the same branch.
+
+CI runs when a PR targeting `preview` is opened, receives new commits, is reopened, or is edited. This includes changing the target branch to `preview` and editing the title or description. Pushes to `preview` also run CI. A maintainer can start a manual run from **Actions**.
 
 CI does **not** fly a vehicle, cook UE assets or run GPU training. For UE, PX4, sensors or performance changes, include a bounded simulator test or explicitly note what could not be run. See the [validation boundaries](docs/airsimx/validation.md). Keep public RPC names and `import airsim` compatible; document deliberate changes to settings, frames, units or timestamps. Do not commit credentials, local network settings, bags, binaries or assets you do not have permission to redistribute.
 

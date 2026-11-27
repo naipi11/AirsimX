@@ -3,6 +3,7 @@ name: AirsimX CI
 on:
   pull_request:
     branches: [preview]
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [preview]
   workflow_dispatch:
